@@ -1,0 +1,673 @@
+---
+title: "Thesis Code"
+author: "Kiersten Barr"
+date: '2022-02-09'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+setwd("~/Documents/GitHub/QMSS-Thesis")
+getwd()
+hsls <- read.csv("Data/hsls_17_student_pets_sr_v1_0.csv")
+ 
+#23503 observations, 9614 variables
+```
+
+#dealing with blank data
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(scales)
+library(psych)
+library(magrittr)
+#install.packages("stargazer")
+library(stargazer)
+library(Hmisc)
+```
+
+```{r}
+
+hsls$M1MATHJOB_plotting <- case_when(hsls$M1MATHJOB == -9 ~ "Missing",
+                                     hsls$M1MATHJOB == -8 ~ "Missing",
+                                     hsls$M1MATHJOB == 0 ~ "No",
+                                     hsls$M1MATHJOB == 1 ~ "Yes")
+  
+M1MATHJOB_sum <- hsls %>% 
+  count(M1MATHJOB_plotting = factor(M1MATHJOB_plotting)) %>% 
+  mutate(pct = prop.table(n))
+
+M1MATHJOB_sum
+
+M1MATHJOB_sum %>% 
+  ggplot(aes(x = M1MATHJOB_plotting, y = pct, label = scales::percent(pct))) + 
+  geom_col(fill = "cornflowerblue")+
+  geom_text(label = with(M1MATHJOB_sum, paste0(round(pct*100,1),"% ",paste0('(', n, ')'))),
+            position = position_dodge(width = .9),    # move to center of bars
+            vjust = -0.5,    # nudge above top of bar
+            size = 3) + 
+  scale_y_continuous(labels = scales::percent)+
+  labs(x='Previous Math-related Job', y='Percent of Respondents',
+     title="Percentage of Students with 9th-grade Math Teachers with \nMath-related Jobs Prior to Teaching",
+     subtitle = "n = 23,503"
+    )
+```
+
+# Look at N1SCIJOB
+```{r}
+hsls$N1SCIJOB_plotting <- case_when(hsls$N1SCIJOB == -9 ~ "Missing",
+                                     hsls$N1SCIJOB == -8 ~ "Missing",
+                                     hsls$N1SCIJOB == 0 ~ "No",
+                                     hsls$N1SCIJOB == 1 ~ "Yes")
+
+N1SCIJOB_sum <- hsls %>% 
+  count(N1SCIJOB_plotting = factor(N1SCIJOB_plotting)) %>% 
+  mutate(pct = prop.table(n))
+
+N1SCIJOB_sum %>% 
+  ggplot(aes(x = N1SCIJOB_plotting, y = pct, label = scales::percent(pct))) + 
+  geom_col(fill = "cornflowerblue")+
+  geom_text(label = with(N1SCIJOB_sum, paste0(round(pct*100,1),"% ",paste0('(', n, ')'))),
+            position = position_dodge(width = .9),    # move to center of bars
+            vjust = -0.5,    # nudge above top of bar
+            size = 3) + 
+  scale_y_continuous(labels = scales::percent)+
+  labs(x='Previous Science-Related Job', y='Percent of Students',
+       title="Percentage of Students with 9th-grade SCience Teachers with \nScience-related Jobs Prior to Teaching")
+```
+
+
+## combined into STEM field
+
+```{r}
+hsls$STEM_teach <- case_when((hsls$N1SCIJOB_plotting == "Missing" & 
+                              hsls$M1MATHJOB_plotting == "Missing") ~ "Missing",
+                            (hsls$N1SCIJOB_plotting == "Yes" | hsls$M1MATHJOB_plotting == "Yes") ~ "Yes",
+                            (hsls$M1MATHJOB_plotting == "No" & hsls$N1SCIJOB_plotting == "No") ~ "No",
+                            (hsls$M1MATHJOB_plotting == "No" & hsls$N1SCIJOB_plotting == "Missing") ~ "No",
+                            (hsls$M1MATHJOB_plotting == "Missing" & hsls$N1SCIJOB_plotting == "No") ~ "No")
+
+STEM_sum <- hsls %>% 
+  count(STEM_teach_plotting = factor(STEM_teach)) %>% 
+  mutate(pct = prop.table(n))
+
+STEM_sum %>% 
+  ggplot(aes(x = STEM_teach_plotting, y = pct, label = scales::percent(pct))) + 
+  geom_col(fill = "cornflowerblue")+
+  geom_text(label = with(STEM_sum, paste0(round(pct*100,1),"% ",paste0('(', n, ')'))),
+            position = position_dodge(width = .9),    # move to center of bars
+            vjust = -0.5,    # nudge above top of bar
+            size = 3) + 
+  scale_y_continuous(labels = scales::percent)+
+  labs(x='Previous STEM-Related Job', y='Percent of Students',
+       title="Percent of Students with 9th grade STEM Teachers with Prior STEM-related Jobs",
+       subtitle = "Prior to data cleanup, n = 23,503")
+
+```
+
+
+# Subset dataset to applicable variables
+
+```{r}
+
+#pull all variables for all regressions
+vars <- 
+  c("M1MATHJOB","N1SCIJOB", "STEM_teach", "N1SCIJOB_plotting", "M1MATHJOB_plotting" #teacher previous stem job
+          ,"X4OCC1STEM1","X4OCCFBMRST1","X5STEMCRED", 'X4OCC30STEM1'  #entrance into STEM
+          ,"X3TGPASTEM","X3THIMATH","X3THISCI",'X3TCREDSTEM','X1TXMTH','X2TXMTH' #'X1TXMTSCOR','X2TXMTSCOR' 
+          , 'X3TCREDMAT', 'X3TCREDSCI', 'X3TGPAMAT', 'X3TGPASCI' #achieve in STEM
+          ,"X1SEX","X1RACE", "X1SES","M1ALTCERT" ,"N1ALTCERT","M1MTHYRS912","N1SCIYRS912" #control
+          , 'M1SEX','N1SEX'
+)
+
+#subsetting the data for the variables above
+hsls1 <- hsls[,vars]
+
+#rename variables
+colnames(hsls1) <- 
+  c("MATH_job","SCI_job", "STEM_job","SCI_job_plotting","MATH_job_plotting"
+          ,"STEM_first_job","STEM_job_2016","STEM_degree",'STEM_job_30'
+          , "HS_STEM_GPA","Highest_HS_Math",'Highest_HS_Sci',"Tot_HS_STEM_Cred","BY_Math_Score",'F1_Math_Score'
+          , 'HS_Math_Cred', 'HS_Sci_Cred', 'HS_Math_GPA', 'HS_Sci_GPA' #achieve in STEM
+          ,"student_male","student_race","student_ses","MATH_altcert","SCI_altcert","Math_Years_Taught","Sci_Years_Taught"
+          , "math_teacher_sex","science_teacher_sex")
+
+
+# changing -9 and -8 to NA across the dataset
+hsls1 <- hsls1 %>% na_if(-9) %>% na_if(-8) %>% na_if(-7)  %>% na_if(-6)
+
+#summary(hsls1)
+```
+
+
+```{r}
+#investigate Enter STEM variable
+hsls1$ENTERstem_prep = case_when(hsls1$STEM_first_job == 1 ~ 'Yes'
+                                ,hsls1$STEM_first_job == 4~ 'Yes'
+                                ,hsls1$STEM_first_job == 5~ 'Yes'
+                                ,hsls1$STEM_job_2016 == 1~ 'Yes'
+                                ,hsls1$STEM_job_2016 == 4~ 'Yes'
+                                ,hsls1$STEM_job_2016 == 5~ 'Yes'
+                                ,hsls1$STEM_job_30 == 1~ 'Yes'
+                                ,hsls1$STEM_job_30 == 4~ 'Yes'
+                                ,hsls1$STEM_job_30 == 5~ 'Yes'
+                                ,hsls1$STEM_degree == 1~ 'Yes'
+                                ,(is.na(hsls1$STEM_first_job) & is.na(hsls1$STEM_job_2016) & is.na(hsls1$STEM_degree)) ~'Missing'
+                                , TRUE ~ 'No')
+
+ENTERstem_prep <- hsls1 %>% 
+  count(ENTERstem_prep = factor(ENTERstem_prep)) %>% 
+  mutate(pct = prop.table(n))
+
+ENTERstem_prep %>% 
+  ggplot(aes(x = ENTERstem_prep, y = pct, label = scales::percent(pct))) + 
+  geom_col(fill = "cornflowerblue")+
+  geom_text(label = with(ENTERstem_prep, paste0(round(pct*100,1),"% ",paste0('(', n, ')'))),
+            position = position_dodge(width = .9),    # move to center of bars
+            vjust = -0.5,    # nudge above top of bar
+            size = 3) + 
+  scale_y_continuous(labels = scales::percent)+
+  labs(x='Entered STEM Fields', y='Percent of Students',
+       title="Percent of Students who Entered STEM Fields (Job or Major)",
+       subtitle = "Prior to data cleanup, n = 23,503")
+
+
+```
+
+
+#imputing
+```{r}
+
+#missing values imputing
+#GPA
+
+hsls1$imputed_HS_STEM_GPA <- with(hsls1, impute(HS_STEM_GPA, mean))
+hsls1$imputed_HS_Sci_GPA <- with(hsls1, impute(HS_Sci_GPA, mean))
+hsls1$imputed_HS_Math_GPA <- with(hsls1, impute(HS_Math_GPA, mean))
+hsls1$imputed_Highest_HS_Math <- with(hsls1, impute(Highest_HS_Math, mean))
+hsls1$imputed_Highest_HS_Sci <- with(hsls1, impute(Highest_HS_Sci, mean))
+hsls1$imputed_Tot_HS_STEM_Cred <- with(hsls1, impute(Tot_HS_STEM_Cred, mean))
+hsls1$imputed_HS_Sci_Cred <- with(hsls1, impute(HS_Sci_Cred, mean))
+hsls1$imputed_HS_Math_Cred <- with(hsls1, impute(HS_Math_Cred, mean))
+hsls1$imputed_student_ses <- with(hsls1, impute(student_ses, mean))
+hsls1$imputed_BY_Math_Score <- with(hsls1, impute(BY_Math_Score, mean))
+hsls1$imputed_F1_Math_Score <- with(hsls1, impute(F1_Math_Score, mean))
+hsls1$imputed_Math_Years_Taught <- with(hsls1, impute(Math_Years_Taught, mean))
+hsls1$imputed_Sci_Years_Taught <- with(hsls1, impute(Sci_Years_Taught, mean))
+
+# calculate difference in math scores
+hsls1$Math_Score_Change <- hsls1$imputed_F1_Math_Score - hsls1$imputed_BY_Math_Score
+```
+
+```{r}
+#prepping some fields prior to removing missing fields
+
+#add ENTERstem field
+hsls1$ENTERstem = case_when(hsls1$STEM_first_job == 1 ~ 1
+                                , hsls1$STEM_first_job == 4~ 1
+                                ,hsls1$STEM_first_job == 5~ 1
+                                ,hsls1$STEM_job_2016 == 1~ 1
+                                ,hsls1$STEM_job_2016 == 4~ 1
+                                ,hsls1$STEM_job_2016 == 5~ 1
+                                ,hsls1$STEM_degree == 1~ 1
+                                ,hsls1$STEM_job_30 == 1~ 1
+                                ,hsls1$STEM_job_30 == 4~ 1
+                                ,hsls1$STEM_job_30 == 5~ 1
+                                , TRUE ~ 0)
+
+
+#clean up student_male field
+hsls1$student_male = case_when(hsls1$student_male ==1 ~1, TRUE ~ 0)
+
+#clean up student race field
+hsls1$student_race <- 
+  case_when(hsls1$student_race == -9 ~ 8,
+               hsls1$student_race == -8 ~ 8,
+               hsls1$student_race == 1 ~ 7,
+               hsls1$student_race == 2 ~ 2,
+               hsls1$student_race == 3 ~ 3,
+               hsls1$student_race == 4 ~ 4,
+               hsls1$student_race == 8 ~ 1,
+               hsls1$student_race == 5 ~ 4,
+               hsls1$student_race == 6 ~ 5,
+               hsls1$student_race == 7 ~ 6,
+               hsls1$student_race == 8 ~ 1,
+              TRUE ~ 8)
+
+#turn race into a factor
+hsls1$student_race.fact <- factor(hsls1$student_race, levels = c(1,2,3,4,5,6,7,8)
+                                , labels = c("White","Asian", "Black" , "Hispanic"
+                                             , "2+ races", "Native_Haw/PI", "Amer_Ind", "Unknown"))
+```
+
+
+#remove missing STEM teach and others to create STEM -> STEM dataset
+
+```{r}
+dim(hsls1)
+# remove missing STEM_job
+hsls_subset_STEM <- subset(hsls1, STEM_job != "Missing")
+dim(hsls_subset_STEM)
+
+# only keep those indicating yes or no entry into STEM
+hsls_subset_STEM <- subset(hsls_subset_STEM, (STEM_first_job >= 0 | STEM_job_2016 >=0 | STEM_degree >= 0 | STEM_job_30 >= 0))
+
+# remove missing certification statuses
+hsls_subset_STEM<- subset(hsls_subset_STEM, not(is.na(MATH_altcert)))
+dim(hsls_subset_STEM)
+
+hsls_subset_STEM<- subset(hsls_subset_STEM, not(is.na(SCI_altcert))) 
+dim(hsls_subset_STEM)
+
+dim(hsls_subset_STEM)
+```
+
+
+# setting up Math -> STEM achieve
+```{r}
+
+# remove missing STEM_job
+dim(hsls1)
+hsls_subset_MATH <- subset(hsls1, not(is.na(MATH_job)))
+dim(hsls_subset_MATH)
+# only keep those indicating yes or no entry into STEM
+hsls_subset_MATH <- subset(hsls_subset_MATH, (STEM_first_job >= 0 | STEM_job_2016 >=0 | STEM_degree >= 0 | STEM_job_30 >= 0))
+
+dim(hsls_subset_MATH)
+# remove missing certification statuses
+hsls_subset_MATH<- subset(hsls_subset_MATH, not(is.na(MATH_altcert))) 
+
+dim(hsls_subset_MATH)
+
+```
+
+# Setting up Sci -> Sci Achieve
+```{r}
+# remove missing STEM_job
+dim(hsls1)
+hsls_subset_SCI <- subset(hsls1, not(is.na(SCI_job)))
+dim(hsls_subset_SCI)
+# only keep those indicating yes or no entry into STEM
+hsls_subset_SCI <- subset(hsls_subset_SCI, (STEM_first_job >= 0 | STEM_job_2016 >=0 | STEM_degree >= 0 | STEM_job_30 >= 0))
+
+dim(hsls_subset_SCI)
+# remove missing certification statuses
+hsls_subset_SCI<- subset(hsls_subset_SCI, not(is.na(SCI_altcert))) 
+
+dim(hsls_subset_SCI)
+```
+
+
+```{r}
+STEM_sum_1 <- hsls_subset_STEM %>% 
+  count(STEM_job_plotting = factor(STEM_job)) %>% 
+  mutate(pct = prop.table(n))
+
+STEM_sum_1 %>% 
+  ggplot(aes(x = STEM_job_plotting, y = pct, label = scales::percent(pct))) + 
+  geom_col(fill = "cornflowerblue")+
+  geom_text(label = with(STEM_sum_1, paste0(round(pct*100,1),"% ",paste0('(', n, ')'))),
+            position = position_dodge(width = .9),    # move to center of bars
+            vjust = -0.5,    # nudge above top of bar
+            size = 3) + 
+  scale_y_continuous(labels = scales::percent)+
+  labs(x='Previous STEM-Related Job', y='Percent of Students',
+       title="Percent of Students with 9th-grade STEM Teachers with Prior STEM-related Jobs"
+       , subtitle = "After data cleanup, n = 9,960")
+
+
+```
+
+```{r}
+ENTERstem <- hsls_subset_STEM %>% 
+  count(ENTERstem = factor(ENTERstem)) %>% 
+  mutate(pct = prop.table(n))
+
+ENTERstem %>% 
+  ggplot(aes(x = ENTERstem, y = pct, label = scales::percent(pct))) + 
+  geom_col(fill = "cornflowerblue")+
+  geom_text(label = with(ENTERstem, paste0(round(pct*100,1),"% ",paste0('(', n, ')'))),
+            position = position_dodge(width = .9),    # move to center of bars
+            vjust = -0.5,    # nudge above top of bar
+            size = 3) + 
+  scale_y_continuous(labels = scales::percent)+
+  labs(x='Entered STEM Fields', y='Percent of Students',
+       title="Percent of Students who Entered STEM Fields (Job or Major)",
+       subtitle = "After data cleanup, n = 9,960")
+```
+
+
+```{r}
+dim(hsls_subset_STEM)
+dim(hsls_subset_MATH)
+dim(hsls_subset_SCI)
+```
+
+# Adding Achieve STEM # to data
+```{r}
+hsls_subset_STEM$AchieveSTEM <- rowMeans(scale(hsls_subset_STEM[, 
+  c("imputed_HS_STEM_GPA","imputed_Highest_HS_Math",'imputed_Highest_HS_Sci',"imputed_Tot_HS_STEM_Cred",'imputed_F1_Math_Score')]))
+
+hist(hsls_subset_STEM$AchieveSTEM)
+
+summary(alpha(hsls_subset_STEM[, c("imputed_HS_STEM_GPA","imputed_Highest_HS_Math",'imputed_Highest_HS_Sci',"imputed_Tot_HS_STEM_Cred","imputed_F1_Math_Score")]))
+
+```
+
+#creating achieve math
+```{r}
+
+hsls_subset_MATH$AchieveMATH <- rowMeans(scale(hsls_subset_MATH[, 
+  c("imputed_HS_Math_GPA","imputed_Highest_HS_Math"
+    ,"imputed_HS_Math_Cred",'imputed_F1_Math_Score')]))
+
+hist(hsls_subset_MATH$AchieveMATH)
+
+summary(alpha(hsls_subset_MATH[,c("imputed_HS_Math_GPA","imputed_Highest_HS_Math"
+    ,"imputed_HS_Math_Cred",'imputed_F1_Math_Score')]))
+
+```
+
+#creating achieve science
+```{r}
+
+hsls_subset_SCI$AchieveSCI <- rowMeans(scale(hsls_subset_SCI[, 
+  c("imputed_HS_Sci_GPA","imputed_Highest_HS_Sci"
+    ,"imputed_HS_Sci_Cred")]))
+
+hist(hsls_subset_SCI$AchieveSCI)
+
+summary(alpha(hsls_subset_SCI[,c("imputed_HS_Sci_GPA","imputed_Highest_HS_Sci"
+    ,"imputed_HS_Sci_Cred")]))
+
+```
+
+```{r}
+#creating new variables, changing some.
+#hsls_subset1$STEMJOB = ifelse(hsls_subset1$M1MATHJOB ==1 | hsls_subset1$N1SCIJOB == 1, 1, 0)
+# hsls_subset_STEMteacher_entry$ENTERstem = case_when(hsls_subset_STEMteacher_entry$STEM_first_job == 1 ~ 1
+#                                 , hsls_subset_STEMteacher_entry$STEM_first_job == 4~ 1
+#                                 ,hsls_subset_STEMteacher_entry$STEM_first_job == 5~ 1
+#                                 ,hsls_subset_STEMteacher_entry$STEM_job_2016 == 1~ 1
+#                                 ,hsls_subset_STEMteacher_entry$STEM_job_2016 == 4~ 1
+#                                 ,hsls_subset_STEMteacher_entry$STEM_job_2016 == 5~ 1
+#                                 ,hsls_subset_STEMteacher_entry$STEM_degree == 1~ 1
+#                                 , TRUE ~ 0)
+# hsls_subset_STEMteacher_entry$student_race <- 
+#   case_when(hsls_subset_STEMteacher_entry$student_race == -9 ~ 8,
+#                hsls_subset_STEMteacher_entry$student_race == -8 ~ 8,
+#                hsls_subset_STEMteacher_entry$student_race == 1 ~ 7,
+#                hsls_subset_STEMteacher_entry$student_race == 2 ~ 2,
+#                hsls_subset_STEMteacher_entry$student_race == 3 ~ 3,
+#                hsls_subset_STEMteacher_entry$student_race == 4 ~ 4,
+#                hsls_subset_STEMteacher_entry$student_race == 8 ~ 1,
+#                hsls_subset_STEMteacher_entry$student_race == 5 ~ 4,
+#                hsls_subset_STEMteacher_entry$student_race == 6 ~ 5,
+#                hsls_subset_STEMteacher_entry$student_race == 7 ~ 6,
+#                hsls_subset_STEMteacher_entry$student_race == 8 ~ 1,
+#               TRUE ~ 8)
+# 
+# 
+# 
+# hsls_subset_STEMteacher_entry$student_race.fact <- factor(hsls_subset_STEMteacher_entry$student_race, levels = c(1,2,3,4,5,6,7,8)
+#                                 , labels = c("White","Asian", "Black" , "Hispanic"
+#                                              , "2+ races", "Native_Haw/PI", "Amer_Ind", "Unknown"))
+# 
+# counts <- table(hsls_subset_STEMteacher_entry$student_race)
+# #counts
+# counts <- table(hsls_subset_STEMteacher_entry$student_race)
+# #counts
+# counts <- table(hsls_subset_STEMteacher_entry$student_race.fact)
+# #counts
+# barplot(counts)
+```
+
+
+
+```{r}
+race_sum <- hsls_subset_STEM %>% 
+  count(race = factor(student_race.fact)) %>% 
+  mutate(pct = prop.table(n))
+
+race_sum %>% 
+  ggplot(aes(x = race, y = pct, label = scales::percent(pct))) + 
+  geom_col(fill = "cornflowerblue")+
+  geom_text(label = with(race_sum, paste0(round(pct*100,1),"% ",paste0('(', n, ')'))),
+            position = position_dodge(width = .9),    # move to center of bars
+            vjust = -0.5,    # nudge above top of bar
+            size = 3) + 
+  scale_y_continuous(labels = scales::percent)+
+  labs(x='Ethnicity', y='Percent of Students',
+       title="Percent of Students with 9thgrade STEM Teachers with Prior STEM-related Jobs")
+
+```
+# Descriptive Stats - Imputation comparisons
+
+```{r}
+#Dataset A: math
+pre_imputation <- 
+   c("HS_Math_GPA","Highest_HS_Math","HS_Math_Cred","Math_Years_Taught","F1_Math_Score", "student_ses")
+
+post_imputation <- c("imputed_HS_Math_GPA", "imputed_Highest_HS_Math","imputed_HS_Math_Cred","imputed_Math_Years_Taught","imputed_F1_Math_Score","imputed_student_ses")
+
+#subsetting the data for the variables above
+pre_imputed_hsls_subset_MATH <- hsls_subset_MATH[,pre_imputation]
+
+post_imputed_hsls_subset_MATH <- hsls_subset_MATH[,post_imputation]
+
+stargazer(pre_imputed_hsls_subset_MATH, title="Pre-imputation", align=TRUE, type = "html", out = "~/Documents/GitHub/QMSS-Thesis/math_pre_imputation.html", no.space=TRUE, median= TRUE, min.max = FALSE)
+
+stargazer(post_imputed_hsls_subset_MATH, title="Post_imputation", align=TRUE, type = "html", out = "~/Documents/GitHub/QMSS-Thesis/math_post_imputation.html", no.space=TRUE, median= TRUE, min.max = FALSE)
+```
+
+```{r}
+#Dataset B: Science
+pre_imputation <- 
+   c("HS_Sci_GPA","Highest_HS_Sci","HS_Sci_Cred","Sci_Years_Taught","student_ses")
+
+post_imputation <- c("imputed_HS_Sci_GPA", "imputed_Highest_HS_Sci","imputed_HS_Sci_Cred","imputed_Sci_Years_Taught","imputed_student_ses")
+
+#subsetting the data for the variables above
+pre_imputed_hsls_subset_SCI <- hsls_subset_SCI[,pre_imputation]
+
+post_imputed_hsls_subset_SCI <- hsls_subset_SCI[,post_imputation]
+
+stargazer(pre_imputed_hsls_subset_SCI, title="Pre-imputation", align=TRUE, type = "html", out = "~/Documents/GitHub/QMSS-Thesis/sci_pre_imputation.html", no.space=TRUE, median= TRUE, min.max = FALSE)
+
+stargazer(post_imputed_hsls_subset_SCI, title="Post_imputation", align=TRUE, type = "html", out = "~/Documents/GitHub/QMSS-Thesis/sci_post_imputation.html", no.space=TRUE, median= TRUE, min.max = FALSE)
+
+```
+
+
+```{r}
+#Dataset C: STEM
+pre_imputation <- 
+   c("HS_Math_GPA","HS_Sci_GPA","Highest_HS_Math","Highest_HS_Sci","Tot_HS_STEM_Cred"
+     ,"Math_Years_Taught","Sci_Years_Taught","F1_Math_Score","student_ses")
+
+post_imputation <-   
+  c("imputed_HS_Math_GPA","imputed_HS_Sci_GPA","imputed_Highest_HS_Math","imputed_Highest_HS_Sci","imputed_Tot_HS_STEM_Cred"
+     ,"imputed_Math_Years_Taught","imputed_Sci_Years_Taught","imputed_F1_Math_Score","imputed_student_ses")
+
+#subsetting the data for the variables above
+pre_imputed_hsls_subset_STEM <- hsls_subset_STEM[,pre_imputation]
+
+post_imputed_hsls_subset_STEM <- hsls_subset_STEM[,post_imputation]
+
+stargazer(pre_imputed_hsls_subset_STEM, title="Pre-imputation", align=TRUE, type = "html", out = "~/Documents/GitHub/QMSS-Thesis/stem_pre_imputation.html", no.space=TRUE, median= TRUE, min.max = FALSE)
+
+stargazer(post_imputed_hsls_subset_STEM, title="Post_imputation", align=TRUE, type = "html", out = "~/Documents/GitHub/QMSS-Thesis/stem_post_imputation.html", no.space=TRUE, median= TRUE, min.max = FALSE)
+```
+
+
+## Descriptive Stats - ALL
+```{r}
+names(hsls_subset_STEM)
+
+```
+
+
+```{r}
+#Dataset A: math
+fields <- 
+   c("MATH_job","AchieveMATH","ENTERstem","student_male","student_race.fact"
+     ,"imputed_student_ses", "MATH_altcert","imputed_Math_Years_Taught")
+
+#subsetting the data for the variables above
+descripive_hsls_subset_MATH <- hsls_subset_MATH[,fields]
+
+stargazer(descripive_hsls_subset_MATH, title="Pre-imputation", align=TRUE, type = "html", out = "~/Documents/GitHub/QMSS-Thesis/math_descriptive stats.html", no.space=TRUE, median= TRUE)
+
+```
+```{r}
+#Dataset B: sci
+fields <- 
+   c("SCI_job","AchieveSCI","ENTERstem","student_male","student_race.fact"
+     ,"imputed_student_ses", "SCI_altcert","imputed_Sci_Years_Taught")
+
+#subsetting the data for the variables above
+descriptive_hsls_subset_SCI <- hsls_subset_SCI[,fields]
+ 
+stargazer(descriptive_hsls_subset_SCI, title="Descriptive stats", align=TRUE, type = "html", out = "~/Documents/GitHub/QMSS-Thesis/sci_descriptive stats.html", no.space=TRUE, median= TRUE)
+
+
+
+
+```
+
+
+```{r}
+
+hsls_subset_STEM$STEM_job <- case_when(hsls_subset_STEM$STEM_job == "Yes" ~1,
+                                       hsls_subset_STEM$STEM_job == "No" ~0,
+                                       TRUE ~ 2)
+
+#Dataset C: stem
+fields <- 
+   c("STEM_job","AchieveSTEM","ENTERstem","student_male","student_race.fact"
+     ,"imputed_student_ses","MATH_altcert" ,"SCI_altcert","imputed_Math_Years_Taught"
+     ,"imputed_Sci_Years_Taught")
+
+#subsetting the data for the variables above
+descriptive_hsls_subset_STEM <- hsls_subset_STEM[,fields]
+ 
+stargazer(descriptive_hsls_subset_STEM, title="Descriptive stats", align=TRUE, type = "html", out = "~/Documents/GitHub/QMSS-Thesis/STEM_descriptive stats.html", no.space=TRUE, median= TRUE)
+
+
+
+
+
+```
+
+# MODELS
+
+## Affects on Achievement
+
+
+### Model 2: OLS: MATH JOB -> AchieveMATH
+```{r}
+
+lm_math = lm(AchieveMATH ~ MATH_job + student_male + student_race.fact + imputed_student_ses+MATH_altcert+imputed_Math_Years_Taught, data=hsls_subset_MATH)
+
+summary(lm_math)
+```
+
+
+### Model 3: OLS: SCI JOB -> AchieveSCI
+
+```{r}
+lm_sci = lm(AchieveSCI ~ SCI_job + student_male + student_race.fact + imputed_student_ses+SCI_altcert+imputed_Sci_Years_Taught, data=hsls_subset_SCI)
+
+summary(lm_sci)
+```
+
+
+### Model 1: OLS: STEM JOB -> AchieveSTEM
+```{r}
+
+lm_stem = lm(AchieveSTEM ~ STEM_job + student_male + student_race.fact + imputed_student_ses+MATH_altcert+SCI_altcert+imputed_Math_Years_Taught+imputed_Sci_Years_Taught, data=hsls_subset_STEM)
+
+summary(lm_stem)
+```
+
+```{r}
+
+stargazer(lm_math, lm_sci, lm_stem, title="Results", align=TRUE, type = "html", out = "~/Documents/GitHub/QMSS-Thesis/ols_results.html", no.space=TRUE)
+
+```
+
+
+#Hypothesis 2: Affect on Entrance into STEM
+
+#MATH
+```{r}
+logit1_math = glm(ENTERstem ~ MATH_job+ student_male + student_race.fact + imputed_student_ses+MATH_altcert+imputed_Math_Years_Taught, data=hsls_subset_MATH, family=binomial)
+summary(logit1_math)
+
+```
+
+```{r}
+exp(coef(logit1_math))
+```
+
+#Science 
+```{r}
+logit2_sci = glm(ENTERstem ~ SCI_job+ student_male + student_race.fact + imputed_student_ses+SCI_altcert+ imputed_Sci_Years_Taught, data=hsls_subset_SCI, family=binomial)
+summary(logit2_sci)
+
+```
+
+```{r}
+exp(coef(logit2_sci))
+```
+
+
+#STEM 
+```{r}
+logit3_stem = glm(ENTERstem ~ STEM_job+ student_male + student_race.fact + imputed_student_ses+MATH_altcert+SCI_altcert+imputed_Math_Years_Taught+imputed_Sci_Years_Taught, data=hsls_subset_STEM, family=binomial)
+summary(logit3_stem)
+
+```
+
+```{r}
+exp(coef(logit3_stem))
+```
+
+```{r}
+stargazer(logit1_math, logit2_sci, logit3_stem, title="Results", align=TRUE, type = "html", out = "~/Documents/GitHub/QMSS-Thesis/logit_models.html", no.space=TRUE)
+```
+
+```{r}
+
+stargazer(logit1_math, logit2_sci, logit3_stem, apply.coef = exp, title="Results", align=TRUE,
+          report = "vc*", single.row = TRUE, 
+          se = NULL, type = "html", out = "~/Documents/GitHub/QMSS-Thesis/odds_ratios.html", no.space=TRUE)
+```
+
+# Possibilites for Appendix
+##  attempting males / females
+
+```{r}
+hsls_subset_STEMteacher_entry$STEM_teacher_female = ifelse(hsls_subset_STEMteacher_entry$math_teacher_sex == 2 | hsls_subset_STEMteacher_entry$science_teacher_sex == 2, 1, 0)
+
+hsls_subset_STEMteacher_entry_female <- subset(hsls_subset_STEMteacher_entry, student_male == 1)# & STEM_teacher_female == 1)
+
+logit1 = glm(ENTERstem ~ STEM_job + student_race.fact + student_ses+MATH_altcert+SCI_altcert+Math_Years_Taught+Sci_Years_Taught, data=hsls_subset_STEMteacher_entry_female, family=binomial)
+summary(logit1)
+
+```
+
+```{r}
+hsls_subset_STEMteacher_entry$STEM_teacher_female = ifelse(hsls_subset_STEMteacher_entry$math_teacher_sex == 2 | hsls_subset_STEMteacher_entry$science_teacher_sex == 2, 1, 0)
+
+#hsls_subset_STEMteacher_entry
+
+lm3 = lm(AchieveSTEM ~ STEM_job + student_male + student_race.fact + imputed_student_ses+MATH_altcert+SCI_altcert+imputed_Math_Years_Taught+imputed_Sci_Years_Taught, data=hsls_subset_STEMteacher_entry) ## predicting how far students go in math from their math self-efficacy
+summary(lm3)
+```
